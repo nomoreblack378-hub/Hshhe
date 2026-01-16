@@ -1,0 +1,33 @@
+name: Instagram Safe Female Bot
+
+on:
+  schedule:
+    # Har 30 min mein workflow trigger hoga
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Manual button ke liye
+
+jobs:
+  run-insta-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Libraries
+        run: |
+          pip install instagrapi pytz requests
+
+      - name: Run Bot Script
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SESSION_ID: ${{ secrets.SESSION_ID }}
+        # 25 min baad script ko auto-stop karega taaki agla cycle clash na ho
+        run: timeout 25m python m.py || echo "Cycle completed or timed out"
+        
