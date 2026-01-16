@@ -7,29 +7,34 @@ from datetime import datetime
 import pytz
 from instagrapi import Client
 
-# Configuration from Secrets
+# --- Setup ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 SESSION_ID = os.getenv("SESSION_ID")
-TARGET_GROUP_IDS = ["746424351272036"]
+TARGET_GROUP_IDS = ["746424351272036"] 
 BOT_USERNAME = "mo.chi.351"
 IST = pytz.timezone('Asia/Kolkata')
 
 def is_sleeping_time():
+    """Returns True if current time in India is between 12 AM and 7 AM"""
     now = datetime.now(IST)
-    # Raat 12 se subah 7 tak band (Indian Time)
-    if now.hour >= 0 and now.hour < 7:
-        return True
-    return False
+    return now.hour >= 0 and now.hour < 7
 
 def get_ai_reply(user_message, username):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    system_prompt = f"You are @{BOT_USERNAME}, a savage and flirty Indian girl. Use Hinglish. Keep it short."
+    
+    # Updated Female Persona
+    system_prompt = (
+        f"You are @{BOT_USERNAME}, a cute but savage Indian girl. "
+        "Your replies are flirty, witty, and in Hinglish. "
+        "Keep them very short (1-2 lines maximum) like a real person chatting."
+    )
+    
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.3-70b-versatile", 
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"User {username} says: {user_message}"}
+            {"role": "user", "content": f"User {username} said: {user_message}"}
         ]
     }
     try:
@@ -38,59 +43,71 @@ def get_ai_reply(user_message, username):
     except: return None
 
 def run_bot():
-    # --- SAFE START ---
+    # --- STEP 1: NIGHT CHECK ---
     if is_sleeping_time():
-        print("😴 Night time in India. Bot is sleeping to avoid ban.")
-        return # Script yahan ruk jayega
+        print("😴 Raat ho gayi hai India mein. Bot is sleeping to stay safe.")
+        return
 
     cl = Client()
-    cl.set_user_agent() # Mobile fingerprint
+    cl.set_user_agent() # Mobile app ki tarah behave karega
 
     try:
         cl.login_by_sessionid(SESSION_ID)
-        print("✅ Login Successful")
+        print(f"✅ Logged in as {BOT_USERNAME}")
     except Exception as e:
-        print(f"❌ Login Failed: {e}")
+        print(f"❌ Login Error: {e}")
         return
 
     processed_ids = set()
-    # Tracking message IDs to avoid double replies
     if os.path.exists('processed.json'):
         with open('processed.json', 'r') as f:
             try: processed_ids = set(json.load(f))
             except: pass
 
-    # GitHub Actions runtime limit (20 mins safe run)
-    start_time = time.time()
-    while (time.time() - start_time) < 1200: # 20 minutes loop
+    # --- STEP 2: ACTIVITY LOOP ---
+    start_run = time.time()
+    # 20 minutes tak chalega phir band ho jayega (next cycle tak)
+    while (time.time() - start_run) < 1200:
         for group_id in TARGET_GROUP_IDS:
             try:
-                messages = cl.direct_thread(group_id, amount=3).messages
+                # Sirf 3 latest messages check karega
+                messages = cl.direct_thread(group_id, amount=3).messages 
                 for msg in reversed(messages):
                     if msg.id not in processed_ids and str(msg.user_id) != str(cl.user_id):
-                        if f"@{BOT_USERNAME}".lower() in (msg.text or "").lower():
+                        text = (msg.text or "").lower()
+                        
+                        if f"@{BOT_USERNAME}".lower() in text:
+                            # STEP 3: Reading Simulation (3-8 seconds)
+                            time.sleep(random.uniform(3, 8))
                             
-                            # Natural delay
-                            time.sleep(random.uniform(5, 10))
+                            sender = "Friend"
+                            try: sender = cl.user_info_v1(msg.user_id).username
+                            except: pass
                             
-                            reply = get_ai_reply(msg.text, "User")
+                            reply = get_ai_reply(text, sender)
+                            
                             if reply:
-                                # Typing delay
-                                time.sleep(random.uniform(3, 7))
+                                # STEP 4: Typing Simulation (Wait time based on length)
+                                typing_speed = len(reply) * 0.12 + random.uniform(2, 5)
+                                print(f"⌨️ Typing for {typing_speed:.1f}s...")
+                                time.sleep(min(typing_speed, 12))
+                                
                                 cl.direct_send(reply, thread_ids=[group_id])
-                                print("✉️ Sent Savage/Flirty Reply")
                         
                         processed_ids.add(msg.id)
             except Exception as e:
                 print(f"⚠️ Error: {e}")
-                if "429" in str(e): return # Rate limit par exit karo
-        
-        # Save progress
+                if "429" in str(e): # Rate limit hit
+                    print("🚨 Rate limit! Ending this cycle.")
+                    return 
+
+        # Progress save karein
         with open('processed.json', 'w') as f:
             json.dump(list(processed_ids)[-100:], f)
-        
-        # Random interval between checks
-        time.sleep(random.randint(60, 120))
+            
+        # STEP 5: Variable Sleep (Don't use 30s fixed)
+        wait = random.randint(60, 150)
+        time.sleep(wait)
 
 if __name__ == "__main__":
     run_bot()
